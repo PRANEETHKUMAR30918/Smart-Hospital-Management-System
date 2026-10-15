@@ -34,10 +34,12 @@ public class BillingController {
     @PostMapping("/patient/billing/{billingId}/pay")
     public ResponseEntity<ApiResponse<Billing>> payBill(
             @PathVariable Long billingId,
-            @RequestBody Map<String, String> body) {
+            @RequestBody Map<String, String> body,
+            Authentication auth) {
+        Long userId = getUserId(auth);
         String paymentMethod = body.getOrDefault("paymentMethod", "CASH");
         return ResponseEntity.ok(ApiResponse.success("Payment processed",
-                billingService.processPayment(billingId, paymentMethod)));
+                billingService.processPayment(billingId, paymentMethod, userId)));
     }
 
     // ── Admin-scoped endpoints ─────────────────────────────────────────────────

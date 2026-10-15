@@ -39,7 +39,8 @@ public class AuthService {
             throw new IllegalArgumentException("Email already registered");
         }
 
-        Role role = request.getRole() != null ? request.getRole() : Role.PATIENT;
+        // Security: Prevent privilege escalation. Public self-registration always assigns PATIENT.
+        Role role = Role.PATIENT;
 
         User user = User.builder()
                 .username(request.getUsername())

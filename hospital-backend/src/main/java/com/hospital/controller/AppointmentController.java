@@ -26,7 +26,7 @@ public class AppointmentController {
 
     @PostMapping("/patient/appointments")
     public ResponseEntity<ApiResponse<Appointment>> bookAppointment(
-            @RequestBody AppointmentDTO dto,
+            @jakarta.validation.Valid @RequestBody AppointmentDTO dto,
             Authentication auth) {
         Long userId = getUserId(auth);
         Appointment appointment = appointmentService.bookAppointment(dto, userId);
@@ -41,30 +41,40 @@ public class AppointmentController {
     }
 
     @GetMapping("/patient/appointments/{id}")
-    public ResponseEntity<ApiResponse<Appointment>> getAppointmentById(@PathVariable Long id) {
+    public ResponseEntity<ApiResponse<Appointment>> getAppointmentById(
+            @PathVariable Long id,
+            Authentication auth) {
+        Long userId = getUserId(auth);
         return ResponseEntity.ok(ApiResponse.success("Appointment found",
-                appointmentService.getAppointmentById(id)));
+                appointmentService.getAppointmentByIdAndPatientUserId(id, userId)));
     }
 
     @PutMapping("/patient/appointments/{id}/status")
     public ResponseEntity<ApiResponse<Appointment>> patientUpdateStatus(
             @PathVariable Long id,
-            @RequestBody StatusUpdateDTO dto) {
+            @RequestBody StatusUpdateDTO dto,
+            Authentication auth) {
+        Long userId = getUserId(auth);
         return ResponseEntity.ok(ApiResponse.success("Appointment status updated",
-                appointmentService.updateStatus(id, dto)));
+                appointmentService.updateStatusByPatient(id, dto, userId)));
     }
 
     @PutMapping("/patient/appointments/{id}")
     public ResponseEntity<ApiResponse<Appointment>> patientUpdateAppointment(
             @PathVariable Long id,
-            @RequestBody AppointmentDTO dto) {
+            @jakarta.validation.Valid @RequestBody AppointmentDTO dto,
+            Authentication auth) {
+        Long userId = getUserId(auth);
         return ResponseEntity.ok(ApiResponse.success("Appointment updated",
-                appointmentService.updateAppointment(id, dto)));
+                appointmentService.updateAppointmentByPatient(id, dto, userId)));
     }
 
     @DeleteMapping("/patient/appointments/{id}")
-    public ResponseEntity<ApiResponse<Void>> patientDeleteAppointment(@PathVariable Long id) {
-        appointmentService.deleteAppointment(id);
+    public ResponseEntity<ApiResponse<Void>> patientDeleteAppointment(
+            @PathVariable Long id,
+            Authentication auth) {
+        Long userId = getUserId(auth);
+        appointmentService.deleteAppointmentByPatient(id, userId);
         return ResponseEntity.ok(ApiResponse.success("Appointment canceled", null));
     }
 

@@ -53,8 +53,18 @@ public class BillingService {
 
     @Transactional
     public Billing processPayment(Long billingId, String paymentMethod) {
+        return processPayment(billingId, paymentMethod, null);
+    }
+
+    @Transactional
+    public Billing processPayment(Long billingId, String paymentMethod, Long userId) {
         Billing billing = billingRepository.findById(billingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Billing", billingId));
+        if (userId != null && billing.getPatient() != null && billing.getPatient().getUser() != null) {
+            if (!billing.getPatient().getUser().getId().equals(userId)) {
+                throw new org.springframework.security.access.AccessDeniedException("You are not authorized to pay this bill");
+            }
+        }
         billing.setStatus(PaymentStatus.PAID);
         billing.setPaymentMethod(paymentMethod);
         billing.setPaymentDate(LocalDateTime.now());

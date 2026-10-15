@@ -1,71 +1,99 @@
-# Medicare Hospital Management System
+# Smart Hospital Management System
 
-This repository contains the complete source code for the **Medicare Hospital Management System**. The project is divided into two distinct parts: a **Spring Boot** backend and a **Vite + React** frontend. 
-
-Both projects are already perfectly organized to be run locally using your preferred IDEs like **VS Code** and **IntelliJ / Eclipse / Spring Tool Suite**.
+A multi-role healthcare administration and patient scheduling platform built with a **Spring Boot 3** REST API and a **React 18 + Vite** frontend.
 
 ---
 
-## 🏥 1. Running the Backend (Spring Boot)
+## 🏗️ Architecture
 
-The backend provides the RESTful API and connects to a MySQL database. It runs on **port 8081**.
+```
+[ Browser / Client ]
+        │  (HTTP / JSON + Bearer JWT)
+        ▼
+[ React 18 SPA (Vite + Tailwind CSS) ]
+        │
+        ▼
+[ Spring Boot 3 REST Backend (Port 8081) ]
+  ├── Security Filter Chain (JwtAuthFilter, Stateless Sessions)
+  ├── REST Controllers (AdminController, DoctorController, PatientController, AuthController)
+  ├── Service Layer (Transactional Business Rules & Authorization Invariants)
+  └── Spring Data JPA Repositories (Hibernate ORM)
+        │
+        ▼
+[ MySQL 8.0 Database (hospital_db) ]
+```
 
-### Prerequisites:
-1. Java 17 or higher installed.
-2. MySQL Server running locally.
+---
 
-### Database Setup:
-1. Open your MySQL client (e.g., MySQL Workbench or Command Line).
-2. The application will automatically create the database `hospital_db` and all required tables when it starts. Ensure your root user credentials match the ones in `hospital-backend/src/main/resources/application.properties` (username: `root`, password: `root`). Change them if your local MySQL setup uses a different password.
+## 🗄️ Domain Model & Entity Relationships
 
-### Running via Terminal/Command Prompt:
-1. Open a terminal.
-2. Navigate to the backend directory:
+- **User**: Core authentication identity (`username`, `email`, `password_hash`, `role` [ADMIN, DOCTOR, PATIENT]).
+- **Patient**: 1-to-1 with `User`. Stores demographic and medical records (`bloodGroup`, `emergencyContact`, `dob`).
+- **Doctor**: 1-to-1 with `User`. Stores clinical metadata (`specialization`, `consultationFee`, `availableDays`).
+- **Appointment**: Many-to-1 with `Patient` and `Doctor`. Tracks `appointmentDate`, `timeSlot`, `symptoms`, `status` [PENDING, CONFIRMED, COMPLETED, CANCELLED].
+- **Prescription**: 1-to-1 with `Appointment`, Many-to-1 with `Patient` and `Doctor`. Tracks `diagnosis`, `medicines`, `instructions`, and `followUpDate`.
+- **Billing**: Many-to-1 with `Patient` and `Appointment`. Generated automatically on appointment booking.
+
+---
+
+## 🔒 Security & Authorization Invariants
+
+1. **Privilege Escalation Prevention**: Public self-registration (`/api/auth/register`) strictly ignores any client-supplied role and enforces `Role.PATIENT`. Doctor and Admin profiles cannot be self-provisioned.
+2. **Ownership Enforcement (IDOR Protection)**: Patients can only inspect, cancel, or pay for their own appointments and bills. Requests attempting to manipulate another patient's identifier are rejected with `403 Forbidden`.
+3. **Slot Conflict Invariant**: Double-booking is rejected at the domain level before database persistence. If an active appointment already exists for `(doctorId, appointmentDate, timeSlot)`, the API responds with `409 Conflict`.
+4. **Input Validation**: Booking dates must be in the present or future (`@FutureOrPresent`), and slots/doctors are validated before persistence.
+
+---
+
+## ⚙️ Getting Started
+
+### Prerequisites
+- **Java**: JDK 17 or 21
+- **Node.js**: v18 or later
+- **MySQL**: 8.0+ running locally
+
+### 1. Backend Setup
+1. Configure environment variables or use the defaults in `application.properties`:
+   ```bash
+   cp hospital-backend/src/main/resources/application-example.properties hospital-backend/src/main/resources/application.properties
+   ```
+2. Run backend via Maven Wrapper:
    ```bash
    cd hospital-backend
+   .\mvnw clean spring-boot:run
    ```
-3. Run the application using the Maven wrapper:
-   - **Windows:** `.\mvnw spring-boot:run`
-   - **Mac/Linux:** `./mvnw spring-boot:run`
+   Backend starts on **`http://localhost:8081`**. The database `hospital_db` and schema are auto-initialized via Hibernate.
 
-### Running via IDE (IntelliJ / Eclipse / STS):
-1. Open your IDE.
-2. Select **File > Open** or **Import Project**.
-3. Select the `hospital-backend` folder (make sure to select the folder containing the `pom.xml` file).
-4. The IDE will recognize it as a Maven project and download the dependencies.
-5. Locate `HospitalApplication.java` in `src/main/java/com/hospital/` and click the **Run** or **Play** button.
-
----
-
-## 💻 2. Running the Frontend (Vite + React)
-
-The frontend is a modern React application built with Vite and Tailwind CSS. It connects to the backend API automatically.
-
-### Prerequisites:
-1. **Node.js** (v18 or higher) installed on your computer.
-
-### Running via VS Code:
-1. Open **Visual Studio Code**.
-2. Go to **File > Open Folder...** and select the `hospital-frontend` folder.
-3. Open the integrated terminal in VS Code (`Ctrl + ~` or `Terminal > New Terminal`).
-4. Install the required Node.js dependencies (you only need to do this once):
+### 2. Frontend Setup
+1. Navigate to the frontend directory:
    ```bash
+   cd hospital-frontend
    npm install
-   ```
-5. Start the Vite development server:
-   ```bash
    npm run dev
    ```
-6. The terminal will show a local URL (usually `http://localhost:5173/` or `http://localhost:5174/`). `Ctrl + Click` the link to open the application in your browser.
+   Frontend starts on **`http://localhost:5173`**.
 
 ---
 
-## 🔑 Test Credentials
+## 🧪 Running Automated Tests
 
-Once both servers are running, open the frontend URL in your browser. The system will automatically create an Admin account on the very first backend startup.
+All domain rules, security barriers, and role mappings are covered by automated JUnit 5 and Mockito tests:
 
-**Admin Login:**
-- **Username:** `admin`
-- **Password:** `admin123`
+```bash
+cd hospital-backend
+.\mvnw test
+```
 
-From the Admin Dashboard, you can manage the hospital, or you can register new Doctor and Patient accounts from the main login screen.
+### Test Suite Breakdown
+- `AdminRouteAccessTest`: Validates URL security rules (ensures `/api/admin/**` rejects unauthenticated users, patients, and doctors with 401/403).
+- `AuthServiceTest`: Verifies privilege escalation prevention during registration.
+- `AppointmentServiceTest`: Verifies slot conflict detection, past-date rejection, fee calculations, and IDOR access boundaries.
+- `BillingServiceTest`: Verifies ownership checks on patient invoice settlements.
+
+---
+
+## ⚖️ Known Limitations & Trade-offs
+
+- **Concurrent Slot Booking**: The slot conflict check uses optimistic query-level detection (`existsByDoctorIdAndAppointmentDateAndTimeSlotAndStatusNot`). Under extreme high concurrency, a database unique constraint on `(doctor_id, appointment_date, time_slot)` or pessimistic locking would be required to completely eliminate race conditions.
+- **JWT Invalidation**: Tokens are stateless and valid until expiration (24 hours). Instant token revocation on logout is not currently backed by a distributed blacklist (e.g., Redis).
+- **Audit Logging**: Entity changes are recorded with timestamps, but a dedicated immutable audit trail (e.g. Envers) is not yet integrated.

@@ -203,4 +203,63 @@ class AppointmentServiceTest {
 
         verify(appointmentRepository, never()).deleteById(any(Long.class));
     }
+
+    @Test
+    void bookAppointment_slotAlreadyBooked_throwsIllegalStateException() {
+        when(patientRepository.findByUserId(100L)).thenReturn(Optional.of(patient));
+        when(doctorRepository.findById(5L)).thenReturn(Optional.of(doctor));
+        when(appointmentRepository.existsByDoctorIdAndAppointmentDateAndTimeSlotAndStatusNot(
+                5L, LocalDate.of(2026, 11, 3), "10:00-10:30", AppointmentStatus.CANCELLED))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> appointmentService.bookAppointment(bookingRequest(), 100L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("already booked");
+
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+        verify(billingRepository, never()).save(any(Billing.class));
+    }
+
+    @Test
+    void bookAppointment_pastDate_throwsIllegalArgumentException() {
+        when(patientRepository.findByUserId(100L)).thenReturn(Optional.of(patient));
+        when(doctorRepository.findById(5L)).thenReturn(Optional.of(doctor));
+
+        AppointmentDTO request = bookingRequest();
+        request.setAppointmentDate(LocalDate.now().minusDays(1));
+
+        assertThatThrownBy(() -> appointmentService.bookAppointment(request, 100L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("past");
+
+        verify(appointmentRepository, never()).save(any(Appointment.class));
+    }
+
+    @Test
+    void getAppointmentByIdAndPatientUserId_unauthorizedPatient_throwsAccessDenied() {
+        com.hospital.entity.User ownerUser = com.hospital.entity.User.builder().id(100L).build();
+        Patient ownerPatient = Patient.builder().id(1L).user(ownerUser).build();
+        Appointment appointment = Appointment.builder().id(10L).patient(ownerPatient).build();
+
+        when(appointmentRepository.findById(10L)).thenReturn(Optional.of(appointment));
+
+        // Patient 200 tries to access Patient 100's appointment
+        assertThatThrownBy(() -> appointmentService.getAppointmentByIdAndPatientUserId(10L, 200L))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    }
+
+    @Test
+    void deleteAppointmentByPatient_unauthorizedPatient_throwsAccessDeniedAndDoesNotDelete() {
+        com.hospital.entity.User ownerUser = com.hospital.entity.User.builder().id(100L).build();
+        Patient ownerPatient = Patient.builder().id(1L).user(ownerUser).build();
+        Appointment appointment = Appointment.builder().id(10L).patient(ownerPatient).build();
+
+        when(appointmentRepository.findById(10L)).thenReturn(Optional.of(appointment));
+
+        // Patient 200 tries to delete Patient 100's appointment
+        assertThatThrownBy(() -> appointmentService.deleteAppointmentByPatient(10L, 200L))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+
+        verify(appointmentRepository, never()).delete(any(Appointment.class));
+    }
 }
